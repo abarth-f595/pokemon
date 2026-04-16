@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Business Text Rewriter</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <!-- CDN: diff-match-patch -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/diff_match_patch/20121119/diff_match_patch.js"></script>
+    <!-- CDN: docx.js -->
+    <script src="https://unpkg.com/docx@8.2.2/build/index.js"></script>
+</head>
+<body>
+    <div class="background-elements">
+        <div class="blob blob-1"></div>
+        <div class="blob blob-2"></div>
+    </div>
+    <!-- Header -->
+    <header class="glass-panel">
+        <div class="logo">
+            <i class="ph ph-magic-wand"></i>
+            <h1>BizRevise AI</h1>
+        </div>
+        <div class="header-actions">
+            <!-- Snippets Button -->
+            <button id="snippetsBtn" class="icon-btn tooltip-container" aria-label="定型文・署名">
+                <i class="ph ph-quotes"></i>
+                <span class="tooltip">定型文</span>
+            </button>
+            <!-- History Button -->
+            <button id="historyBtn" class="icon-btn tooltip-container" aria-label="履歴">
+                <i class="ph ph-clock-counter-clockwise"></i>
+                <span class="tooltip">履歴</span>
+            </button>
+            <button id="addressBookBtn" class="icon-btn tooltip-container" aria-label="連絡先">
+                <i class="ph ph-address-book"></i>
+                <span class="tooltip">連絡先</span>
+            </button>
+            <button id="settingsBtn" class="icon-btn tooltip-container" aria-label="設定">
+                <i class="ph ph-gear"></i>
+                <span class="tooltip">設定</span>
+            </button>
+        </div>
+    </header>
+    <!-- Main Content -->
+    <main class="container">
+        <!-- Controls / Settings -->
+        <section class="controls glass-panel">
+            <div class="control-group">
+                <label for="targetContact"><i class="ph ph-user"></i> 宛先（連絡先から選択）</label>
+                <select id="targetContact">
+                    <option value="">-- 指定なし --</option>
+                    <!-- JavaScriptで動的生成 -->
+                </select>
+            </div>
+            <div class="control-group">
+                <label for="docType"><i class="ph ph-file-text"></i> 文章の種類</label>
+                <select id="docType">
+                    <option value="社内メール">社内メール</option>
+                    <option value="社外メール">社外メール</option>
+                    <option value="チャットメッセージ">チャットメッセージ</option>
+                    <option value="企画書・提案書">企画書・提案書</option>
+                    <option value="謝罪文">謝罪文</option>
+                    <option value="報告書・日報">報告書・日報</option>
+                </select>
+            </div>
+            <div class="control-group">
+                <label for="tone"><i class="ph ph-mask-happy"></i> トーン＆マナー</label>
+                <select id="tone">
+                    <option value="丁寧（標準）">丁寧（標準）</option>
+                    <option value="より丁寧・謙譲">より丁寧・謙譲</option>
+                    <option value="簡潔・ロジカル">簡潔・ロジカル</option>
+                    <option value="フレンドリー・柔らかめ">フレンドリー・柔らかめ</option>
+                    <option value="厳格・フォーマル">厳格・フォーマル</option>
+                </select>
+            </div>
+            <div class="control-group">
+                <label for="actionType"><i class="ph ph-pencil-simple"></i> 処理内容</label>
+                <select id="actionType">
+                    <option value="丁寧なリライト（構成の整理含む）">丁寧なリライト（構成整理含む）</option>
+                    <option value="誤字脱字・不自然な表現の修正のみ">誤字脱字・不自然な表現の修正のみ</option>
+                    <option value="要約（短くする）">要約（短くする）</option>
+                    <option value="詳細化（具体的にする）">詳細化（具体的にする）</option>
+                </select>
+            </div>
+        </section>
+        <!-- Editor Area -->
+        <section class="editor-area">
+            <!-- Input -->
+            <div class="editor-panel glass-panel">
+                <div class="panel-header">
+                    <h2><i class="ph ph-keyboard"></i> 元の文章</h2>
+                    <div class="panel-actions">
+                        <button id="insertSnippetBtn" class="text-btn"><i class="ph ph-plus-circle"></i> 定型文</button>
+                        <button id="clearBtn" class="text-btn"><i class="ph ph-trash"></i> クリア</button>
+                    </div>
+                </div>
+                <div class="snippet-dropdown hidden" id="snippetQuickDropdown">
+                    <ul id="quickSnippetList"></ul>
+                </div>
+                <textarea id="inputText" placeholder="ここに添削・リライトしたい文章を入力してください..."></textarea>
+            </div>
+            <!-- Generate Button -->
+            <div class="action-area">
+                <button id="generateBtn" class="primary-btn">
+                    <i class="ph ph-sparkle"></i>
+                    <span>AIで校正・リライト</span>
+                </button>
+            </div>
+            <!-- Output -->
+            <div class="editor-panel glass-panel">
+                <div class="panel-header panel-header-output">
+                    <h2><i class="ph ph-check-circle"></i> AI生成結果</h2>
+                    
+                    <div class="output-tools">
+                        <!-- Diff Toggle -->
+                        <div class="toggle-group">
+                            <span class="toggle-label">差分表示</span>
+                            <label class="switch">
+                                <input type="checkbox" id="diffToggle">
+                                <span class="slider round"></span>
+                            </label>
+                        </div>
+                        <div class="export-actions">
+                            <button id="copyBtn" class="icon-btn small-icon-btn tooltip-container" aria-label="コピー"><i class="ph ph-copy"></i><span class="tooltip">コピー</span></button>
+                            <button id="downloadTxtBtn" class="icon-btn small-icon-btn tooltip-container" aria-label="TXT保存"><i class="ph ph-file-text"></i><span class="tooltip">TXT出力</span></button>
+                            <button id="downloadWordBtn" class="icon-btn small-icon-btn tooltip-container" aria-label="Word保存"><i class="ph ph-file-doc"></i><span class="tooltip">Word出力</span></button>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="outputText" class="output-area">結果がここに表示されます...</div>
+                <div id="diffOutputText" class="output-area hidden"></div>
+                
+                <!-- Loading Overlay -->
+                <div id="loadingOverlay" class="loading-overlay hidden">
+                    <div class="spinner"></div>
+                    <p>AIが文章を推敲しています...</p>
+                </div>
+            </div>
+        </section>
+    </main>
+    <!-- Settings & Custom Rules Modal -->
+    <div id="settingsModal" class="modal-backdrop hidden">
+        <div class="modal glass-panel">
+            <div class="modal-header">
+                <h2><i class="ph ph-gear"></i> 設定 & マイ・ルール</h2>
+                <button id="closeSettingsBtn" class="icon-btn"><i class="ph ph-x"></i></button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="apiProvider">AI プロバイダー</label>
+                    <select id="apiProvider">
+                        <option value="openai">OpenAI (ChatGPT)</option>
+                        <option value="gemini">Google Gemini</option>
+                        <option value="claude">Anthropic Claude</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="apiKey">API キー</label>
+                    <input type="password" id="apiKey" placeholder="APIキーを入力...">
+                </div>
+                <div class="form-group">
+                    <label for="modelSelect">モデル</label>
+                    <select id="modelSelect"></select>
+                </div>
+                <hr style="border:0; border-top: 1px solid var(--glass-border); margin:1rem 0;">
+                <div class="form-group">
+                    <label for="customRules"><i class="ph ph-shield-check"></i> 独自の推敲ルール（任意）</label>
+                    <p class="modal-desc" style="margin-bottom:0.5rem">例: 「弊社サービス名は必ず『MyService』とする」「フランクになりすぎないよう注意」等。空欄でも可。</p>
+                    <textarea id="customRules" rows="3" placeholder="AIへの独自の指示"></textarea>
+                </div>
+                <p class="warning-text hidden" id="claudeCorsWarning">
+                    <i class="ph ph-warning"></i> Claudeはブラウザ(CORS)の制限等で動作しない場合があります。
+                </p>
+            </div>
+            <div class="modal-footer">
+                <button id="saveSettingsBtn" class="primary-btn">保存して閉じる</button>
+            </div>
+        </div>
+    </div>
+    <!-- Address Book Modal -->
+    <div id="addressBookModal" class="modal-backdrop hidden">
+        <div class="modal glass-panel address-modal">
+            <div class="modal-header">
+                <h2><i class="ph ph-address-book"></i> 連絡先の管理</h2>
+                <button id="closeAddressBtn" class="icon-btn"><i class="ph ph-x"></i></button>
+            </div>
+            <div class="modal-body address-body">
+                <div class="address-split">
+                    <div class="contact-list-container">
+                        <h3>保存済みの連絡先</h3>
+                        <ul id="contactList" class="contact-list"></ul>
+                    </div>
+                    <div class="contact-form-container">
+                        <h3>新規追加 / 編集</h3>
+                        <form id="contactForm" class="contact-form">
+                            <input type="hidden" id="contactId">
+                            <div class="form-group"><label>会社名</label><input type="text" id="contactCompany"></div>
+                            <div class="form-group"><label>役職</label><input type="text" id="contactRole"></div>
+                            <div class="form-group"><label>氏名</label><input type="text" id="contactName" required></div>
+                            <div class="form-group"><label>メール</label><input type="email" id="contactEmail"></div>
+                            <div class="form-actions">
+                                <button type="button" id="clearContactFormBtn" class="secondary-btn">クリア</button>
+                                <button type="submit" class="primary-btn small-btn">保存</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- Snippets (定型文) Modal -->
+    <div id="snippetsModal" class="modal-backdrop hidden">
+        <div class="modal glass-panel address-modal">
+            <div class="modal-header">
+                <h2><i class="ph ph-quotes"></i> 定型文・署名の管理</h2>
+                <button id="closeSnippetsBtn" class="icon-btn"><i class="ph ph-x"></i></button>
+            </div>
+            <div class="modal-body address-body">
+                <div class="address-split">
+                    <div class="contact-list-container">
+                        <h3>登録済みスニペット</h3>
+                        <ul id="snippetList" class="contact-list"></ul>
+                    </div>
+                    <div class="contact-form-container">
+                        <h3>新規追加 / 編集</h3>
+                        <form id="snippetForm" class="contact-form">
+                            <input type="hidden" id="snippetId">
+                            <div class="form-group"><label>タイトル (例: いつもの挨拶)</label><input type="text" id="snippetTitle" required></div>
+                            <div class="form-group"><label>本文</label><textarea id="snippetContent" rows="4" required></textarea></div>
+                            <div class="form-actions">
+                                <button type="button" id="clearSnippetFormBtn" class="secondary-btn">クリア</button>
+                                <button type="submit" class="primary-btn small-btn">保存</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- History Modal -->
+    <div id="historyModal" class="modal-backdrop hidden">
+        <div class="modal glass-panel history-modal">
+            <div class="modal-header">
+                <h2><i class="ph ph-clock-counter-clockwise"></i> 履歴 (最新30件)</h2>
+                <button id="closeHistoryBtn" class="icon-btn"><i class="ph ph-x"></i></button>
+            </div>
+            <div class="modal-body">
+                <ul id="historyList" class="history-list">
+                    <!-- JS動的追加 -->
+                </ul>
+            </div>
+        </div>
+    </div>
+    <!-- Notification Toast -->
+    <div id="toast" class="toast hidden">
+        <i class="ph ph-info"></i>
+        <span id="toastMsg">メッセージ</span>
+    </div>
+    <script src="app.js"></script>
+</body>
+</html>
