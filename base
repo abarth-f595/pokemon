@@ -1,0 +1,4 @@
+export default defineConfig({
+  base: '/リポジトリ名/',  // ← ここを追加（前後にスラッシュが必要）
+  plugins: [react()],
+})
