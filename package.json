@@ -1,0 +1,8 @@
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "lint": "eslint src --ext js,jsx --report-unused-disable-directives --max-warnings 0",
+    "preview": "vite preview",
+    "predeploy": "npm run build",        // ← ここを追加
+    "deploy": "gh-pages -d dist"         // ← ここを追加
+  },
