@@ -58,9 +58,21 @@ const toastIcon = toast.querySelector('i');
 const loadingOverlay = document.getElementById('loadingOverlay');
 // AI Configs
 const AI_MODELS = {
-    openai: [{ id: 'gpt-4o', name: 'GPT-4o' }, { id: 'gpt-4o-mini', name: 'GPT-4o-mini' }],
-    gemini: [{ id: 'gemini-1.5-pro-latest', name: 'Gemini 1.5 Pro' }, { id: 'gemini-1.5-flash-latest', name: 'Gemini 1.5 Flash' }],
-    claude: [{ id: 'claude-3-5-sonnet-20240620', name: 'Claude 3.5 Sonnet' }, { id: 'claude-3-haiku-20240307', name: 'Claude 3 Haiku' }]
+    openai: [
+        { id: 'gpt-4o',        name: 'GPT-4o (推奨)' },
+        { id: 'gpt-4o-mini',   name: 'GPT-4o mini (高速・安価)' },
+        { id: 'gpt-3.5-turbo', name: 'GPT-3.5 Turbo (安価)' }
+    ],
+    gemini: [
+        { id: 'gemini-2.0-flash',    name: 'Gemini 2.0 Flash (推奨・最新)' },
+        { id: 'gemini-1.5-pro',      name: 'Gemini 1.5 Pro' },
+        { id: 'gemini-1.5-flash',    name: 'Gemini 1.5 Flash (高速)' }
+    ],
+    claude: [
+        { id: 'claude-3-5-sonnet-20241022', name: 'Claude 3.5 Sonnet (推奨・最新)' },
+        { id: 'claude-3-5-haiku-20241022',  name: 'Claude 3.5 Haiku (高速・安価)' },
+        { id: 'claude-3-opus-20240229',     name: 'Claude 3 Opus (最高精度)' }
+    ]
 };
 // ==========================================
 // 2. Utils & Modals
@@ -361,28 +373,64 @@ copyBtn.addEventListener('click', () => {
     navigator.clipboard.writeText(currentGeneratedText).then(() => showToast('コピーしました')).catch(() => showToast('コピー失敗', true));
 });
 async function callAPI(provider, apiKey, model, systemPrompt, userText) {
-    if(provider === 'openai') {
+    if (provider === 'openai') {
         const res = await fetch('https://api.openai.com/v1/chat/completions', {
-            method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-            body: JSON.stringify({ model: model||'gpt-4o', messages: [{role:'system',content:systemPrompt}, {role:'user',content:userText}], temperature:0.7 })
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+            body: JSON.stringify({
+                model: model || 'gpt-4o',
+                messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userText }],
+                temperature: 0.3
+            })
         });
-        if(!res.ok) throw new Error((await res.json()).error?.message || 'API Error');
+        if (!res.ok) { const e = await res.json(); throw new Error(e.error?.message || `OpenAI Error ${res.status}`); }
         return (await res.json()).choices[0].message.content;
-    } else if(provider === 'gemini') {
-        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model||'gemini-1.5-pro-latest'}:generateContent?key=${apiKey}`, {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ contents: [{role:"user",parts:[{text:userText}]}], systemInstruction: {role:"system",parts:[{text:systemPrompt}]}, generationConfig:{temperature:0.7} })
-        });
-        if(!res.ok) throw new Error((await res.json()).error?.message || 'API Error');
-        return (await res.json()).candidates[0].content.parts[0].text;
-    } else if(provider === 'claude') {
+
+    } else if (provider === 'gemini') {
+        const geminiModel = model || 'gemini-2.0-flash';
+        const res = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${apiKey}`,
+            {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contents: [{ role: 'user', parts: [{ text: userText }] }],
+                    systemInstruction: { role: 'system', parts: [{ text: systemPrompt }] },
+                    generationConfig: { temperature: 0.3 }
+                })
+            }
+        );
+        if (!res.ok) { const e = await res.json(); throw new Error(e.error?.message || `Gemini Error ${res.status}`); }
+        const data = await res.json();
+        const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (!text) throw new Error('Geminiから応答を取得できませんでした');
+        return text;
+
+    } else if (provider === 'claude') {
+        const claudeModel = model || 'claude-3-5-sonnet-20241022';
         const res = await fetch('https://api.anthropic.com/v1/messages', {
-            method: 'POST', headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'anthropic-dangerously-allow-browser': 'true'},
-            body: JSON.stringify({ model: model||'claude-3-5-sonnet-20240620', system: systemPrompt, messages: [{role:'user',content:userText}], max_tokens: 2000, temperature: 0.7 })
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'x-api-key': apiKey,
+                'anthropic-version': '2023-06-01',
+                'anthropic-dangerously-allow-browser': 'true'
+            },
+            body: JSON.stringify({
+                model: claudeModel,
+                system: systemPrompt,
+                messages: [{ role: 'user', content: userText }],
+                max_tokens: 4096,
+                temperature: 0.3
+            })
         });
-        if(!res.ok) throw new Error((await res.json()).error?.message || 'API Error');
-        return (await res.json()).content[0].text;
+        if (!res.ok) { const e = await res.json(); throw new Error(e.error?.message || `Claude Error ${res.status}`); }
+        const data = await res.json();
+        const text = data?.content?.[0]?.text;
+        if (!text) throw new Error('Claudeから応答を取得できませんでした');
+        return text;
     }
+    throw new Error('不明なプロバイダー: ' + provider);
 }
 generateBtn.addEventListener('click', async () => {
     const text = inputText.value.trim();
@@ -400,10 +448,45 @@ generateBtn.addEventListener('click', async () => {
     const contactId = targetContactSelect.value;
     let targetStr = "指定なし";
     if (contactId) { const c = contacts.find(x => x.id == contactId); if(c) targetStr = formatContactName(c); }
-    const systemPrompt = `あなたは優秀なビジネスコミュニケーション専門家です。元テキストを以下条件で修正・リライトしてください。
-[条件] 文章の種類: ${docTypeSelect.value} / トーン: ${toneSelect.value} / 処理: ${actionTypeSelect.value} / 宛先情報: ${targetStr}
-${customRules ? `[※ユーザー固有の必須ルール]\n${customRules}` : ''}
-[出力ルール] 宛名が必要な場合は補完し、修正後の文章のみを出力(解説等の前置きは一切不要)。`;
+    const actionType = actionTypeSelect.value;
+    let actionInstruction = '';
+    if (actionType.includes('誤字脱字') || actionType.includes('修正のみ')) {
+        actionInstruction = `
+【添削の具体的な指示】
+- 誤字・脱字を発見し必ず修正すること
+- 助詞の誤り（は/が/を/に等）を修正すること
+- 句読点の位置が不自然な箇所を修正すること
+- 二重否定・意味の通らない表現を修正すること
+- 敬語の誤り（尊敬語・謙譲語の混同等）を修正すること
+- ビジネス文書として不自然な表現を全て改善すること
+- 修正箇所がなくても必ずより自然な表現に改善すること`;
+    } else if (actionType.includes('リライト')) {
+        actionInstruction = `
+【リライトの指示】
+- 全体の構成を整理し読みやすい順序に並べ直すこと
+- 冗長な表現を簡潔にすること
+- 誤字脱字・敬語の誤りも同時に修正すること
+- 段落分けを適切に行うこと`;
+    } else if (actionType.includes('要約')) {
+        actionInstruction = `【要約の指示】重要な情報を漏らさず短くまとめること。箇条書きを活用して読みやすくすること。`;
+    } else if (actionType.includes('詳細化')) {
+        actionInstruction = `【詳細化の指示】根拠・理由・具体例を追加して内容を充実させること。曖昧な表現を具体的にすること。`;
+    }
+    const systemPrompt = `あなたは日本語ビジネス文書の専門校正者です。入力された文章を以下の条件で必ず修正・リライトしてください。
+
+【基本条件】
+- 文章の種類: ${docTypeSelect.value}
+- トーン・スタイル: ${toneSelect.value}
+- 処理内容: ${actionType}
+- 宛先情報: ${targetStr}
+${actionInstruction}
+
+【出力ルール】
+1. 修正後の文章のみを出力すること（説明・前置き・コメントは一切不要）
+2. 宛名が必要な文書で宛先情報がある場合は冒頭に補完すること
+3. 元の文章から何も変更しない場合でも、必ず改善点を見つけて修正すること
+4. 「以下に修正しました」等の説明文は含めないこと
+${customRules ? `\n【ユーザー固有の必須ルール】\n${customRules}` : ''}`;
     try {
         const result = await callAPI(provider, apiKey, model, systemPrompt, text);
         currentOriginalText = text;
